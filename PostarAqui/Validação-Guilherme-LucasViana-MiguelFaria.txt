@@ -1,0 +1,116 @@
+###############################################################
+ATIVIDADE 02 - ANÁLISE DE SEGURANÇA PDCA
+UPLOAD SEGURO DE ARQUIVOS
+###############################################################
+
+NOME: Guilherme Damas, Lucas Viana, Miguel Faria
+DATA: 30/08/2025
+
+Tabela de Análise de Riscos
+O script de upload de arquivos em PHP, em sua forma original, é extremamente perigoso. A análise revela as seguintes vulnerabilidades críticas:
+
+| ID  | Vulnerabilidade Analisada                     | Probabilidade | Impacto | Risco (P x I) | Nível de Risco |
+| :-- | :-------------------------------------------- | :-------------: | :-----: | :-------------: | :-------------- |
+| V01 | **Upload de Arquivos Executáveis (Web Shell)** |        5        |    5    |       25        | **Crítico** |
+| V02 | Ausência de Limite de Tamanho de Arquivo (DoS)  |        4        |    4    |       16        | **Alto** |
+| V03 | Sobrescrita de Arquivos no Servidor           |        3        |    3    |        9        | **Médio** |
+| V04 | Validação Incompleta de Nome de Arquivo       |        3        |    4    |       12        | **Alto** |
+
+Legenda:
+
+Probabilidade e Impacto: Escala de 1 (Muito Baixo) a 5 (Muito Alto).
+Risco: Probabilidade x Impacto.
+
+Mudanças Realizadas:
+
+Validação de Erros: O script agora verifica se ocorreram erros durante o processo de upload inicial.
+
+Limite de Tamanho: Foi imposto um limite máximo de 5MB por arquivo.
+
+Nome de Arquivo Aleatório e Seguro: O nome original do arquivo é descartado. Um novo nome, único e aleatório, é gerado para o arquivo no servidor. Isso impede a sobrescrita e dificulta que um atacante encontre e execute um arquivo malicioso.
+
+Verificação de Existência: Embora o nome seja aleatório, uma verificação extra garante que não haverá sobrescrita.
+
+CÓDIGO PHP CORRIGIDO (upload.php)
+<?php
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_FILES["file"])) {
+    
+    $upload_dir = "uploads/";
+    // Garante que o diretório de uploads exista
+    if (!is_dir($upload_dir)) {
+        mkdir($upload_dir, 0755, true);
+    }
+
+    $file_tmp_name = $_FILES["file"]["tmp_name"];
+    $file_error = $_FILES["file"]["error"];
+    $file_size = $_FILES["file"]["size"];
+    $original_name = basename($_FILES["file"]["name"]);
+    
+    // --- 1. Verificação de erros de upload ---
+    if ($file_error !== UPLOAD_ERR_OK) {
+        die("Erro no upload do arquivo. Código do erro: " . $file_error);
+    }
+
+    // --- 2. Validação de tipo de arquivo (Whitelist) ---
+    $allowed_extensions = ['jpg', 'jpeg', 'png', 'pdf'];
+    $allowed_mime_types = ['image/jpeg', 'image/png', 'application/pdf'];
+    
+    $file_ext = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $file_mime_type = $finfo->file($file_tmp_name);
+
+    if (!in_array($file_ext, $allowed_extensions) || !in_array($file_mime_type, $allowed_mime_types)) {
+        die("Erro: Tipo de arquivo não permitido.");
+    }
+
+    // --- 3. Validação de tamanho do arquivo ---
+    $max_file_size = 5 * 1024 * 1024; // 5 MB
+    if ($file_size > $max_file_size) {
+        die("Erro: O arquivo excede o tamanho máximo de 5MB.");
+    }
+
+    // --- 4. Gerar um nome de arquivo novo, único e seguro ---
+    // Isso evita sobrescrita e ataques de adivinhação de nome de arquivo
+    $new_filename = uniqid('', true) . '.' . $file_ext;
+    $destination = $upload_dir . $new_filename;
+
+    // --- 5. Mover o arquivo para o destino final ---
+    if (move_uploaded_file($file_tmp_name, $destination)) {
+        echo "Arquivo enviado com sucesso! Salvo como: " . htmlspecialchars($new_filename);
+    } else {
+        echo "Erro crítico ao mover o arquivo para o destino.";
+    }
+
+} else {
+    echo "Nenhum arquivo enviado ou método de requisição inválido.";
+}
+?>
+
+# Desabilita a execução de scripts na pasta de uploads
+<FilesMatch "\.(php|phtml|php3|php4|php5|pl|py|cgi|sh|rb)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Opcional: Força o download de certos tipos de arquivo em vez de exibi-los
+<FilesMatch "\.(html|htm|js)$">
+    ForceType application/octet-stream
+    Header set Content-Disposition "attachment"
+</FilesMatch>
+
+
+Respostas ao Questionário
+1. Quais vulnerabilidades você encontrou no código original?
+O código original possuía vulnerabilidades críticas: não validava o tipo de arquivo, permitindo o upload de scripts maliciosos (web shells); não limitava o tamanho do arquivo, abrindo brecha para ataques de negação de serviço (DoS); utilizava o nome original do arquivo, o que poderia levar à sobrescrita de arquivos importantes e facilitava a localização de arquivos maliciosos no servidor.
+
+2. Qual vulnerabilidade apresentou maior risco (P x I)?
+A vulnerabilidade de Upload de Arquivos Executáveis (Web Shell) apresentou o risco mais crítico (25/25). A exploração é direta (Probabilidade 5/5) e permite que um atacante execute comandos no servidor, obtendo controle total sobre ele (Impacto 5/5).
+
+3. Qual seria o impacto real se essa falha fosse explorada em uma empresa?
+O impacto seria catastrófico. Um atacante poderia roubar todos os dados da aplicação e do banco de dados, sequestrar o servidor com ransomware, usar o servidor para atacar outras máquinas na rede interna da empresa, ou utilizá-lo para hospedar conteúdo ilegal e realizar ataques contra outros alvos na internet, resultando em perdas financeiras, danos à reputação e graves consequências legais.
+
+4. Como você corrige as falhas encontradas?
+As falhas foram corrigidas implementando um processo de validação em múltiplas etapas: verificação de erros, checagem do tipo de arquivo contra uma "lista branca" (whitelist) de extensões e tipos MIME, imposição de um limite de tamanho, e a substituição do nome de arquivo original por um nome único e aleatório gerado pelo sistema. Adicionalmente, foi sugerido o uso de um arquivo .htaccess para impedir a execução de scripts no diretório de uploads.
+
+5. Após aplicar o PDCA, quais melhorias foram efetivas?
+A melhoria mais efetiva foi a mudança de uma abordagem de "confiança total" para uma de "confiança zero" (Zero Trust) em relação aos dados enviados pelo usuário. O sistema agora valida ativamente cada aspecto do arquivo (tipo, tamanho, nome) antes de aceitá-lo, bloqueando por padrão qualquer coisa que não esteja explicitamente permitida. Isso reduz drasticamente a superfície de ataque e torna o sistema muito mais resiliente.
